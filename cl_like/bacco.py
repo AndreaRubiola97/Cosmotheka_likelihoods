@@ -236,7 +236,7 @@ class BaccoCalculator(object):
             
             ####   My addition, store parameters out of bounds, which require extrapolation 
 
-            ## NOTICE the +- 0.02 displacement I am adding on the bounds, this is needed to ensure the derivative calculator does not offset the bounds when calculating the four points derivative, one point of which (either the leftmost or the rightmost, depending whether we are on the lower or upper bound, might be overshooting the bound)
+            ## NOTICE the +- 0.02 displacement I am adding on the bounds, this is needed to ensure the derivative calculator does not offset the bounds when calculating the four points derivative, one point of which (either the leftmost or the rightmost, depending whether we are on the lower or upper bound,) might be overshooting the bound)
             
             # do it twice, for baryons and nonlinear for consistency, I actually just need nonlinear
             if (within_bounds_baryons[i] == False): #and (parname != 'expfactor')  :
@@ -548,15 +548,17 @@ class BaccoCalculator(object):
         
         ######################################################################
         #  Calculations are within the EFT framework, what we want are the values of the 15 perturbative terms to get the biased tracer power specturm
+        # General definition: theta is the set of BaccoEmu free input parameters.  
         
-        #  If the parameter set is within  baccoemu bounds, no extrapolation is performed and just run Carlos' cosmotheka
-        #  If the parameter set is without baccoemu bounds, that is it is dtheta away from baccoemu full dynamic range
-        	# - The power spectrum is calculated at a baccoemu boundary parameter set theta and extrapolated up to theta+dtheta by means of a first order Taylor expansion in two steps:
+        #  If all of the parameters in the parameter set are within  baccoemu bounds, no extrapolation is performed and just run Carlos' cosmotheka
+        
+        #  If some of the parameters in theta is out of baccoemu bounds, that is, a value "dtheta" away from baccoemu limits, then:
+        	# - The power spectrum is calculated at the baccoemu parameter value "theta" and extrapolated up to theta+dtheta by means of a first or second order Taylor expansion in two steps (the order is chosen by instantiating the "taylor_order" variable when the bacco object is being initialised):
         		## P_{alpha,beta}(theta+dtheta,k,z) = r_{alpha,beta}(theta+dtheta,k,z) * P_mm(theta+dtheta,k,z),   		
-        		#  with r(k,theta+delta_theta) = r(k,theta) + sum_i [dr^{i}_mm(theta_i)/dtheta_i * (delta_theta)_i] (https://arxiv.org/pdf/2103.09820
+        		#  with r(k,theta+delta_theta) = r(k,theta) + sum_i [dr^{i}_mm(theta_i)/dtheta_i * (delta_theta)_i] (first-order Taylor expansion, with i running on the parameters out of bacco bounds https://arxiv.org/pdf/2103.09820
         		#, eq. 3.13,3.14)
         
-        #  Notice that this influences EXCLUSIVELY NONLINEAR, pnn is always calculated within the standard baccoemu bounds.
+        #  Notice that this influences EXCLUSIVELY the quantities associated to the NONLINEAR flag , pnn is always calculated within the standard baccoemu bounds.
         # In other words: 
         	# - One thing is directly calling baccoemu's get_nonlinear_pnn function. This function returns the 15 perturbative terms of the EFT, which allow to build a BIASED TRACER (= galaxies) power spectrum once the 15 terms are combined with the respective bias (user-defined terms) and summed. The output of the summation is equal to emulator.get_galaxy_real_pk(bias=bias_params, k=k, **params) for a given bias_params. This function MUST NOT receive baccoemu extended parameters
         	# The nonlinear MATTER power spectrum, instead, is calculated by means of get_nonlinear_pk and MUST RECEIVE baccoemu extended parameters.
@@ -576,12 +578,11 @@ class BaccoCalculator(object):
         k_for_bacco = self.ks/h  # this is in h/Mpc^{-1}
         self.k_for_bacco = k_for_bacco
         
-        # TODO: Use lbias.emulator['nonlinear']['k'].max() instead of 0.75?
+        # TODO: Use lbias.emulator['nonlinear']['k'].max() instead of 0.75? Carlos' note
         
         self.mask_ks_for_bacco = np.squeeze(np.where(k_for_bacco <= 0.75))
         k_for_bacco = k_for_bacco[self.mask_ks_for_bacco]
         
-        #dx = 0.01  # HARD CODED DERIVATIVE SIZE, CONSIDER WHETHER TO MAKE IT ADAPTIVE.
         
         #within_bounds_mpk = self._check_within_bounds(cospar)['nonlinear']
         #within_bounds_mpk = self._my_check_within_bounds(cospar)['nonlinear']
@@ -600,7 +601,7 @@ class BaccoCalculator(object):
         ##### Do the same separatedly for the matter power spectrum 
         
         
-        # Note, I am using a temporary variable naming, not the best I can think of, just for symmetry:
+        # Naming convention (trying to keep symmetry between mpk and mpk_matter):
         
         # - within_bounds_matter corresponds to within_matter, within_bounds_mpk_matter corresponds to within_bounds_mpk. All quantities with _mpk_matter are the ones of interest so far, 	BECAUSE THE ONES WITHOUT MPK REFER TO BARYONS, WHICH REQUIRE FURTHER DUPLICATION OF THE CODE. 
         
@@ -613,7 +614,7 @@ class BaccoCalculator(object):
         
         
         
-        # TEMP RIMUOVIMI: SERVE SOLO PER FAR FUNZIONARE IL CODICE SUCCESSIVAMENTE  
+        # TEMP REMOVE ME: Only needed to ensure the code works when testing  
         
         #without_bounds_mpk = np.array(['sigma8_cold','omega_cold'])
         #to_start_value_mpk['sigma8_cold'] = 0.75
@@ -651,7 +652,7 @@ class BaccoCalculator(object):
             
         else: # otherwise, handle extrapolation, which involves two different parts 
             
-            #print('Sono qui, è falso')
+            
             ########################  1) P_mm part ############################################################
         
             if len(without_bounds_mpk_mpmatter) == 0:  # if there are points beyond the narrower limits but not within the broader ones: 
@@ -713,7 +714,7 @@ class BaccoCalculator(object):
             for par_name in without_bounds_mpk:  
                 
                 drk_dvariable_dictionary['drk_d' + par_name]  = self.first_order_central_derivator(self._get_drk_dparameter,to_start_value_mpk[par_name],dx=self.dx,args=(k_at_start,cosmopars_start_mpk.copy(),par_name))#[1]
-                             # array of length k with the power spectrum derivative with respect to the desired parameter
+                             # array of length k storing the power spectrum derivative with respect to the desired parameter
                 drk_perturbation_term_dictionary[par_name] = drk_dvariable_dictionary['drk_d' + par_name] * ( cosmopars_predict_mpk.copy()[par_name] - cosmopars_start_mpk.copy()[par_name] ) # calculate dp/dpar * delta_par 
                 total_perturbation_rk = total_perturbation_rk + drk_perturbation_term_dictionary[par_name] # add all the perturbations together, at first order it is linear	    
             
@@ -722,24 +723,24 @@ class BaccoCalculator(object):
                 d2rk_dvariable_dictionary = {} # storing all derivatives
                 d2rk_perturbation_term_dictionary = {}  # storing derivatives*delta_theta for all parameters
                 
-                # ho quattro termini: la derivata seconda di ciascun parametro due volte rispetto allo stesso parametro e la derivata mista
+                # four terms: 2nd derivative of the function w.r.t. the same parameter (main diagonal entries in the Hessian matrix), and 2nd order mixed derivatives (out-of-diagonal entries in the Hessian matrix)
                 
                 for elements in  itertools.product(without_bounds_mpk,without_bounds_mpk):
                     par_name_1  = elements[0]
                     par_name_2  = elements[1]
                     
-                    if par_name_1 == par_name_2: # se la derivata è rispetto allo stesso parametro due volte
+                    if par_name_1 == par_name_2: # if along the Hessian matrix main diagonal
                         d2rk_dvariable_dictionary['d2rk_d' + par_name_1+par_name_2]  = 0.5 *  self.second_order_central_derivator_diagonal(self._get_d2rk_dparameter,to_start_value_mpk[par_name_1],to_start_value_mpk[par_name_2],dx=self.dx,args=(k_at_start,cosmopars_start_mpk.copy(),par_name_1,par_name_2))#[1]
                              # array of length k with the power spectrum derivative with respect to the desired parameter
                             
-                    if par_name_1 != par_name_2: # derivata mista
+                    if par_name_1 != par_name_2: # if outside the Hessian matrix main diagonal
                         
                         d2rk_dvariable_dictionary['d2rk_d' + par_name_1+par_name_2]  =   self.second_order_central_derivator_mixed(self._get_d2rk_dparameter,to_start_value_mpk[par_name_1],to_start_value_mpk[par_name_2],dx=self.dx,dy=self.dx,args=(k_at_start,cosmopars_start_mpk.copy(),par_name_1,par_name_2))#[1]
                         
                     d2rk_perturbation_term_dictionary[par_name_1+'_'+par_name_2] = d2rk_dvariable_dictionary['d2rk_d' + par_name_1+par_name_2] * ( cosmopars_predict_mpk.copy()[par_name_1] - cosmopars_start_mpk.copy()[par_name_1] ) * ( cosmopars_predict_mpk.copy()[par_name_2] - cosmopars_start_mpk.copy()[par_name_2] ) # calculate dp/dpar * delta_par 
                     
-                    total_perturbation_rk = total_perturbation_rk + d2rk_perturbation_term_dictionary[par_name_1+'_'+par_name_2] # add all the perturbations together, at first order it is linear
-               
+                    total_perturbation_rk = total_perturbation_rk + d2rk_perturbation_term_dictionary[par_name_1+'_'+par_name_2] # add all the perturbations together, total_perturbation_rk is already storing first order derivatives at this point of the code. 
+                         
                
             
             self.drk_dvariable_dictionary = drk_dvariable_dictionary
